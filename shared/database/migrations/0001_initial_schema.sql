@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS conversations (
+  id SERIAL PRIMARY KEY,
+  customer_id VARCHAR(255),
+  transcript TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

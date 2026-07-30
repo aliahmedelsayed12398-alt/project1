@@ -1,0 +1,8 @@
+from fastapi import FastAPI
+
+app = FastAPI(title="Voice Telephony Service")
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}

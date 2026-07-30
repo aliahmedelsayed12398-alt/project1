@@ -1,0 +1,13 @@
+name: Deploy RAG Analytics
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder deployment step
+        run: echo "Deploy rag analytics"
