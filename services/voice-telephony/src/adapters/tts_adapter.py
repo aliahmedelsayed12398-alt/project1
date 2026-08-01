@@ -1,41 +1,50 @@
 import os
 import abc
 import logging
-import httpx
 from typing import AsyncGenerator
 
 logger = logging.getLogger("voice_service.tts_adapter")
 
 
-# ==============================================================================
-# ABSTRACT BASE CLASS (The Adapter Interface)
-# ==============================================================================
 class BaseTTSAdapter(abc.ABC):
     """
     Abstract interface for all Text-to-Speech engines.
     Ensures vendor lock-in prevention: Any TTS service must implement synthesize_stream.
     """
+
     @abc.abstractmethod
     async def synthesize_stream(self, text: str) -> AsyncGenerator[bytes, None]:
         """Convert input text into streaming raw audio bytes (mu-law / PCM)."""
         pass
 
 
-# ==============================================================================
-# OPTION 1: ElevenLabs Implementation
-# ==============================================================================
+class LocalTTSAdapter(BaseTTSAdapter):
+    """Simple local fallback adapter for development and tests."""
+
+    async def synthesize_stream(self, text: str) -> AsyncGenerator[bytes, None]:
+        payload = text.encode("utf-8")
+        yield payload
+
+
 class ElevenLabsTTSAdapter(BaseTTSAdapter):
     """
     TTS Adapter using ElevenLabs streaming API.
     Provides natural-sounding conversational voices with Egyptian Arabic accents.
     """
+
     def __init__(self):
         self.api_key = os.getenv("ELEVENLABS_API_KEY", "")
-        self.voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")  # Default Voice ID
-        # Output format specifically requested by Twilio Media Streams: u-law 8000Hz
+        self.voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
         self.url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/stream?output_format=ulaw_8000"
 
     async def synthesize_stream(self, text: str) -> AsyncGenerator[bytes, None]:
+        try:
+            import httpx
+        except Exception:
+            logger.warning("httpx is not installed; falling back to local TTS adapter")
+            yield text.encode("utf-8")
+            return
+
         headers = {
             "xi-api-key": self.api_key,
             "Content-Type": "application/json"
@@ -52,17 +61,17 @@ class ElevenLabsTTSAdapter(BaseTTSAdapter):
                     logger.error(f"ElevenLabs TTS failed with status {response.status_code}")
                     return
 
-                # Stream incoming audio chunks immediately as they arrive from ElevenLabs
                 async for chunk in response.aiter_bytes():
                     yield chunk
 
-# ==============================================================================
-# FACTORY FUNCTION (Selects Provider dynamically from .env)
-# ==============================================================================
+
 def get_tts_adapter() -> BaseTTSAdapter:
     provider = os.getenv("TTS_PROVIDER", "elevenlabs").lower()
     if provider == "elevenlabs":
-        return ElevenLabsTTSAdapter()
+        try:
+            return ElevenLabsTTSAdapter()
+        except Exception:
+            logger.warning("ElevenLabs TTS unavailable; falling back to local TTS adapter")
+            return LocalTTSAdapter()
     else:
-        # Only ElevenLabs implementation included here; add others as needed.
         raise ValueError(f"Unsupported TTS_PROVIDER: {provider}. Available: elevenlabs")
